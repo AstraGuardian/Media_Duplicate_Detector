@@ -1,0 +1,7 @@
+# No external dependencies required
+# This application uses only Python standard library modules:
+# - tkinter (built-in GUI framework)
+# - pathlib (built-in path handling)
+# - os (built-in file operations)
+
+# Minimum Python version: 3.7+
