@@ -5,11 +5,36 @@ A cross-platform GUI application for detecting and managing duplicate video file
 ## Features
 
 - **Cross-Platform**: Works on Windows and Linux with minimal setup
-- **User-Friendly GUI**: Simple, intuitive interface built with tkinter
+- **Modern UI**: Sleek, professional interface with dark/light theme support
+- **Theme Toggle**: Switch between dark and light modes with a single click
+- **User-Friendly GUI**: Intuitive interface with visual feedback and animations
 - **Smart Scanning**: Recursively scans library folders to find movies with multiple video files
-- **Organized Display**: Collapsible tree view showing movies and their duplicate files
+- **Quality Indicators**: Green stars highlight recommended files to keep
+- **Visual Feedback**: Colored checkboxes, hover effects, and animated scanning status
+- **Organized Display**: Collapsible tree view with row striping for easy scanning
 - **Safe Deletion**: Select specific files to delete with confirmation dialog
-- **File Information**: Displays file sizes and full paths for easy identification
+- **File Information**: Displays file sizes and full paths with modern tooltips
+- **Persistent Settings**: Remembers your theme preference across sessions
+
+## User Interface
+
+The application features a modern, polished interface with:
+
+- **Dark Mode (Default)**: Easy on the eyes with a professional dark color scheme
+- **Light Mode**: Clean, bright alternative theme
+- **One-Click Theme Toggle**: Switch themes instantly with the 🌙/☀️ button
+- **Visual Hierarchy**:
+  - Blue buttons for primary actions (Scan)
+  - Red buttons for destructive actions (Delete)
+  - Gray buttons for utility functions
+- **Quality Recommendations**: Green stars (★) mark the best quality files to keep
+- **Interactive Feedback**:
+  - Animated scanning indicator with rotating dots
+  - Hover effects on tree rows for easier tracking
+  - Blue highlighting for selected items
+  - Row striping for improved readability
+- **Modern Typography**: Cross-platform fonts optimized for readability
+- **Responsive Design**: Smooth animations and instant theme switching
 
 ## Requirements
 
@@ -63,18 +88,22 @@ Tkinter is included with the official Python installer from python.org. Make sur
    - Click "Select Folder"
 
 3. **Scan for duplicates**:
-   - Click the "Scan" button
-   - Wait for the scan to complete (progress shown in status bar)
+   - Click the blue "Scan" button
+   - Watch the animated scanning indicator (rotating dots show progress)
+   - Results appear automatically when complete
 
 4. **Review results**:
-   - Movies with multiple video files are displayed in a tree view
+   - Movies with multiple video files are displayed in a tree view with row striping
+   - Files marked with green stars (★) are recommended to keep (best quality)
+   - Hover over rows to highlight them
    - Click on a movie folder to expand and see individual files
    - Each file shows its name and size
+   - Tooltips show full paths when hovering over files (appears after 0.5 seconds)
 
 5. **Delete duplicates**:
-   - Click checkboxes next to files you want to delete
+   - Click checkboxes next to files you want to delete (selected rows turn blue)
    - Use "Select All" or "Deselect All" for bulk operations
-   - Click "Delete Selected"
+   - Click the red "Delete Selected" button
    - Confirm the deletion when prompted
 
 ## Working with SMB/Network Shares
@@ -246,6 +275,32 @@ If you get permission errors when scanning or deleting:
 - The application remains responsive during scanning
 - Progress is shown in the status bar
 
+## Theme Customization
+
+The application includes a sophisticated theme system with persistent preferences.
+
+### Switching Themes
+
+Click the theme toggle button (🌙 for dark mode, ☀️ for light mode) in the top-right corner of the window. Your preference is automatically saved and will be remembered the next time you launch the application.
+
+### Theme Preferences
+
+Theme preferences are stored in: `~/.plex_duplicate_detector/config.json`
+
+This file also stores other settings like your last-used library path and window size.
+
+### Color Schemes
+
+**Dark Theme (Default)**:
+- Easy on the eyes in low-light conditions
+- Professional appearance with subtle contrast
+- Colors: Dark grays, blue accents, green stars, blue checkboxes
+
+**Light Theme**:
+- Clean, bright interface for well-lit environments
+- Same accent colors for consistency
+- Colors: Light grays, white backgrounds, blue accents
+
 ## Development
 
 ### Project Structure
@@ -256,7 +311,16 @@ Plex_Duplicate_Detector/
 ├── gui.py               # GUI components and logic
 ├── scanner.py           # File scanning functionality
 ├── file_operations.py   # File deletion and utilities
-├── requirements.txt     # Python dependencies
+├── folder_tags.py       # Folder tagging system
+├── quality_analyzer.py  # Video quality scoring
+├── tooltip.py           # Modern tooltip system
+├── themes/              # Theme system
+│   ├── __init__.py
+│   ├── theme_config.py  # Color palettes and spacing
+│   ├── theme_manager.py # Theme application and persistence
+│   └── widget_styles.py # Widget-specific styling
+├── requirements.txt     # Python dependencies (still empty!)
+├── CLAUDE.md           # Project guidance for Claude Code
 └── README.md           # This file
 ```
 
