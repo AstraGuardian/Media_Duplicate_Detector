@@ -6,6 +6,13 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Callable, Optional
 
+try:
+    from themes.theme_config import get_monospace_font
+except ImportError:
+    # Fallback if theme module not available
+    def get_monospace_font():
+        return "Courier"
+
 
 class TreeviewTooltip:
     """
@@ -15,19 +22,21 @@ class TreeviewTooltip:
     - 500ms delay before tooltip appears
     - Auto-hides when mouse moves away
     - Positioned at mouse cursor
-    - Light yellow background with black border
+    - Theme-aware colors (dark/light mode support)
     """
 
-    def __init__(self, treeview: ttk.Treeview, get_tooltip_text_func: Callable[[str], Optional[str]]):
+    def __init__(self, treeview: ttk.Treeview, get_tooltip_text_func: Callable[[str], Optional[str]], theme_manager=None):
         """
         Initialize tooltip for a treeview.
 
         Args:
             treeview: The treeview widget to add tooltips to
             get_tooltip_text_func: Function that takes item_id and returns tooltip text
+            theme_manager: Optional ThemeManager instance for theme-aware colors
         """
         self.treeview = treeview
         self.get_tooltip_text = get_tooltip_text_func
+        self.theme_manager = theme_manager
         self.tooltip_window: Optional[tk.Toplevel] = None
         self.current_item: Optional[str] = None
         self.after_id: Optional[str] = None
@@ -83,22 +92,37 @@ class TreeviewTooltip:
         # Hide any existing tooltip
         self._hide_tooltip()
 
+        # Get colors from theme if available, otherwise use light fallback
+        if self.theme_manager:
+            palette = self.theme_manager.get_palette(self.theme_manager.current_theme)
+            bg_color = palette['tooltip_bg']
+            fg_color = palette['text_primary']
+            border_color = palette['tooltip_border']
+        else:
+            # Fallback to light colors if no theme manager
+            bg_color = "#FFFACD"
+            fg_color = "black"
+            border_color = "black"
+
         # Create tooltip window
         self.tooltip_window = tk.Toplevel(self.treeview)
         self.tooltip_window.wm_overrideredirect(True)  # Remove window decorations
+
+        # Get monospace font for paths
+        font_family = get_monospace_font()
 
         # Create label with tooltip text
         label = tk.Label(
             self.tooltip_window,
             text=tooltip_text,
-            background="#FFFACD",  # Light yellow
-            foreground="black",
+            background=bg_color,
+            foreground=fg_color,
             relief=tk.SOLID,
             borderwidth=1,
-            font=("sans-serif", 9),
+            font=(font_family, 9),
             justify=tk.LEFT,
-            padx=5,
-            pady=3
+            padx=8,
+            pady=8
         )
         label.pack()
 

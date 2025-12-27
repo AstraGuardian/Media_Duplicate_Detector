@@ -17,6 +17,8 @@ from file_operations import delete_files, format_file_size, calculate_total_size
 from folder_tags import FolderTagManager
 from tooltip import TreeviewTooltip, get_path_from_tags
 from quality_analyzer import QualityAnalyzer
+from themes.theme_manager import ThemeManager
+from themes.theme_config import SPACING
 
 
 class DuplicateDetectorGUI:
@@ -55,17 +57,31 @@ class DuplicateDetectorGUI:
         # Shared data
         self.library_path = tk.StringVar()
 
+        # Animation control
+        self.scanning_lock = threading.Lock()
+        self.scanning = False
+        self.scan_dots = 0
+        self.scan_animation_id = None
+        self.last_hover_item_video = None
+        self.last_hover_item_folder = None
+
         # Initialize tag manager
         self.tag_manager = FolderTagManager()
         self.tagged_folders = self.tag_manager.load_tags()
 
+        # Initialize theme manager (before creating widgets)
+        self.theme_manager = ThemeManager(self.root)
+
         # Create GUI components
         self._create_widgets()
+
+        # Apply theme after widgets are created
+        self.theme_manager.apply_theme(self.theme_manager.current_theme)
 
     def _create_widgets(self):
         """Create and layout all GUI widgets."""
         # Top frame for shared path selection
-        top_frame = ttk.Frame(self.root, padding="10")
+        top_frame = ttk.Frame(self.root, padding=f"{SPACING['md']}")
         top_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
 
         ttk.Label(top_frame, text="Library Path:").grid(row=0, column=0, padx=5)
@@ -79,6 +95,16 @@ class DuplicateDetectorGUI:
 
         help_button = ttk.Button(top_frame, text="?", width=3, command=self._shared_show_path_help)
         help_button.grid(row=0, column=3, padx=2)
+
+        # Theme toggle button
+        theme_icon = "🌙" if self.theme_manager.current_theme == "dark" else "☀️"
+        self.theme_toggle_button = ttk.Button(
+            top_frame,
+            text=theme_icon,
+            width=3,
+            command=self._toggle_theme
+        )
+        self.theme_toggle_button.grid(row=0, column=4, padx=2)
 
         # Create tabbed interface
         self.notebook = ttk.Notebook(self.root)
@@ -95,14 +121,14 @@ class DuplicateDetectorGUI:
     def _create_video_files_tab(self):
         """Create the Video Files tab with existing functionality."""
         # Create tab container
-        video_tab = ttk.Frame(self.notebook, padding="10")
+        video_tab = ttk.Frame(self.notebook, padding=f"{SPACING['md']}")
         self.notebook.add(video_tab, text="Video Files")
 
         # Control frame for scan button
-        control_frame = ttk.Frame(video_tab)
+        control_frame = ttk.Frame(video_tab, padding=f"{SPACING['sm']}")
         control_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
 
-        ttk.Button(control_frame, text="Scan", command=self._video_start_scan).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="Scan", command=self._video_start_scan, style='Primary.TButton').pack(side=tk.LEFT, padx=5)
 
         # Middle frame for tree view
         middle_frame = ttk.Frame(video_tab)
@@ -139,11 +165,20 @@ class DuplicateDetectorGUI:
         middle_frame.rowconfigure(0, weight=1)
         middle_frame.columnconfigure(0, weight=1)
 
+        # Configure row striping
+        palette = self.theme_manager.get_palette(self.theme_manager.current_theme)
+        self.video_tree.tag_configure('oddrow', background=palette['bg_secondary'])
+        self.video_tree.tag_configure('hover', background=palette['bg_hover'])
+
         # Bind click event for checkbox toggling
         self.video_tree.bind("<Button-1>", self._video_on_tree_click)
 
+        # Add hover effect to tree items
+        self.video_tree.bind('<Motion>', self._on_tree_hover)
+        self.video_tree.bind('<Leave>', self._on_tree_leave)
+
         # Add tooltip support for showing full paths
-        TreeviewTooltip(self.video_tree, lambda item_id: get_path_from_tags(self.video_tree, item_id))
+        TreeviewTooltip(self.video_tree, lambda item_id: get_path_from_tags(self.video_tree, item_id), self.theme_manager)
 
         # Bottom frame for status and actions
         bottom_frame = ttk.Frame(video_tab)
@@ -160,6 +195,7 @@ class DuplicateDetectorGUI:
             button_frame,
             text="Delete Selected",
             command=self._video_delete_selected,
+            style='Danger.TButton',
             state=tk.DISABLED
         )
         self.video_delete_button.pack(side=tk.RIGHT, padx=5)
@@ -194,11 +230,11 @@ class DuplicateDetectorGUI:
     def _create_duplicate_folders_tab(self):
         """Create the Duplicate Folders tab."""
         # Create tab container
-        folder_tab = ttk.Frame(self.notebook, padding="10")
+        folder_tab = ttk.Frame(self.notebook, padding=f"{SPACING['md']}")
         self.notebook.add(folder_tab, text="Duplicate Folders")
 
         # Control frame - top of tab
-        control_frame = ttk.Frame(folder_tab)
+        control_frame = ttk.Frame(folder_tab, padding=f"{SPACING['sm']}")
         control_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
 
         # Row 1: Matching mode and threshold
@@ -267,7 +303,8 @@ class DuplicateDetectorGUI:
         ttk.Button(
             control_frame,
             text="Scan for Duplicates",
-            command=self._folder_start_scan
+            command=self._folder_start_scan,
+            style='Primary.TButton'
         ).grid(row=1, column=3, padx=5, pady=5, sticky=tk.W)
 
         # Row 3: Multiple paths list (initially hidden)
@@ -283,6 +320,9 @@ class DuplicateDetectorGUI:
             width=self.PATHS_LISTBOX_WIDTH
         )
         self.folder_paths_listbox.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        # Register listbox for theme updates
+        self.theme_manager.register_custom_widget(self.folder_paths_listbox)
 
         paths_button_frame = ttk.Frame(self.folder_paths_frame)
         paths_button_frame.pack(side=tk.LEFT, padx=5)
@@ -330,11 +370,20 @@ class DuplicateDetectorGUI:
         middle_frame.rowconfigure(0, weight=1)
         middle_frame.columnconfigure(0, weight=1)
 
+        # Configure row striping
+        palette = self.theme_manager.get_palette(self.theme_manager.current_theme)
+        self.folder_tree.tag_configure('oddrow', background=palette['bg_secondary'])
+        self.folder_tree.tag_configure('hover', background=palette['bg_hover'])
+
         # Bind click event for checkbox toggling
         self.folder_tree.bind("<Button-1>", self._folder_on_tree_click)
 
+        # Add hover effect to tree items
+        self.folder_tree.bind('<Motion>', self._on_tree_hover)
+        self.folder_tree.bind('<Leave>', self._on_tree_leave)
+
         # Add tooltip support for showing full paths
-        TreeviewTooltip(self.folder_tree, lambda item_id: get_path_from_tags(self.folder_tree, item_id))
+        TreeviewTooltip(self.folder_tree, lambda item_id: get_path_from_tags(self.folder_tree, item_id), self.theme_manager)
 
         # Bottom frame for status and actions
         bottom_frame = ttk.Frame(folder_tab)
@@ -397,6 +446,95 @@ class DuplicateDetectorGUI:
 
     # ===== Shared Methods (used by both tabs) =====
 
+    def _toggle_theme(self):
+        """Toggle between dark and light themes."""
+        self.theme_manager.toggle_theme()
+
+        # Update toggle button icon
+        theme_icon = "🌙" if self.theme_manager.current_theme == "dark" else "☀️"
+        self.theme_toggle_button.config(text=theme_icon)
+
+        # Update tree colors
+        self._update_tree_colors()
+
+    def _update_tree_colors(self):
+        """Update tree item colors after theme change."""
+        palette = self.theme_manager.get_palette(self.theme_manager.current_theme)
+
+        # Update video tree
+        self.video_tree.tag_configure("best", foreground=palette['accent_success'])
+        self.video_tree.tag_configure("checked", foreground=palette['accent_primary'])
+        self.video_tree.tag_configure("oddrow", background=palette['bg_secondary'])
+        self.video_tree.tag_configure("hover", background=palette['bg_hover'])
+
+        # Update folder tree
+        self.folder_tree.tag_configure("best", foreground=palette['accent_success'])
+        self.folder_tree.tag_configure("checked", foreground=palette['accent_primary'])
+        self.folder_tree.tag_configure("oddrow", background=palette['bg_secondary'])
+        self.folder_tree.tag_configure("hover", background=palette['bg_hover'])
+
+    def _on_tree_hover(self, event):
+        """Highlight tree item on hover."""
+        tree = event.widget
+        item = tree.identify_row(event.y)
+
+        # Determine which tree we're in
+        if tree == self.video_tree:
+            last_item = self.last_hover_item_video
+        else:  # folder_tree
+            last_item = self.last_hover_item_folder
+
+        if item != last_item:
+            # Remove highlight from previous item
+            if last_item:
+                try:
+                    current_tags = list(tree.item(last_item, 'tags'))
+                    if 'hover' in current_tags:
+                        current_tags.remove('hover')
+                    tree.item(last_item, tags=tuple(current_tags))
+                except tk.TclError:
+                    # Item no longer exists (tree was cleared)
+                    pass
+
+            # Highlight new item
+            if item:
+                current_tags = list(tree.item(item, 'tags'))
+                if 'hover' not in current_tags:
+                    current_tags.append('hover')
+                tree.item(item, tags=tuple(current_tags))
+
+            # Update the appropriate last_hover_item
+            if tree == self.video_tree:
+                self.last_hover_item_video = item
+            else:
+                self.last_hover_item_folder = item
+
+    def _on_tree_leave(self, event):
+        """Remove hover highlight when mouse leaves tree."""
+        tree = event.widget
+
+        # Determine which tree we're in
+        if tree == self.video_tree:
+            last_item = self.last_hover_item_video
+        else:  # folder_tree
+            last_item = self.last_hover_item_folder
+
+        if last_item:
+            try:
+                current_tags = list(tree.item(last_item, 'tags'))
+                if 'hover' in current_tags:
+                    current_tags.remove('hover')
+                tree.item(last_item, tags=tuple(current_tags))
+            except tk.TclError:
+                # Item no longer exists (tree was cleared)
+                pass
+
+            # Clear the appropriate last_hover_item
+            if tree == self.video_tree:
+                self.last_hover_item_video = None
+            else:
+                self.last_hover_item_folder = None
+
     def _shared_browse_folder(self):
         """Open folder browser dialog to select library path."""
         folder = filedialog.askdirectory(title="Select Plex Library Folder")
@@ -443,7 +581,13 @@ After mounting, you can enter the path like:
         # Clear previous results
         self._video_clear_tree()
         self.checked_files.clear()
-        self.video_status_label.config(text="Scanning...")
+
+        # Start scanning animation
+        with self.scanning_lock:
+            self.scanning = True
+        self.scan_dots = 0
+        self._animate_scan_text(self.video_status_label)
+
         self.video_delete_button.config(state=tk.DISABLED)
 
         # Run scan in separate thread to keep GUI responsive
@@ -464,6 +608,26 @@ After mounting, you can enter the path like:
         except Exception as e:
             self.root.after(0, self._video_show_scan_error, str(e))
 
+    def _animate_scan_text(self, label):
+        """Animate scanning status with rotating dots."""
+        with self.scanning_lock:
+            is_scanning = self.scanning
+
+        if is_scanning:
+            dots = '.' * (self.scan_dots % 4)
+            label.config(text=f"Scanning{dots}")
+            self.scan_dots += 1
+            # Schedule next update in 350ms for snappier feel
+            self.scan_animation_id = self.root.after(350, lambda: self._animate_scan_text(label))
+
+    def _stop_scan_animation(self):
+        """Stop the scanning animation safely."""
+        with self.scanning_lock:
+            self.scanning = False
+        if self.scan_animation_id:
+            self.root.after_cancel(self.scan_animation_id)
+            self.scan_animation_id = None
+
     def _video_display_results(self, results: Dict[str, List[Dict]]):
         """
         Display scan results in the tree view.
@@ -471,6 +635,9 @@ After mounting, you can enter the path like:
         Args:
             results: Dictionary mapping folder paths to video file lists
         """
+        # Stop scanning animation
+        self._stop_scan_animation()
+
         self.scan_results = results
         self._video_clear_tree()
 
@@ -482,7 +649,7 @@ After mounting, you can enter the path like:
         analyzer = QualityAnalyzer(use_metadata=False)
 
         # Populate tree with results
-        for folder_path, video_files in sorted(results.items()):
+        for idx, (folder_path, video_files) in enumerate(sorted(results.items())):
             folder_name = get_folder_name(folder_path)
             file_count = len(video_files)
 
@@ -516,23 +683,35 @@ After mounting, you can enter the path like:
                 tk.END,
                 text=parent_text,
                 values=("",),
-                tags=("folder", folder_path)
+                tags=("folder", folder_path, "oddrow" if idx % 2 else "")
             )
 
             # Insert children (video files)
             for video_file in sorted(video_files, key=lambda x: x['filename']):
                 # Add star if this is the best file
                 is_best = (video_file['full_path'] == best_file_path)
-                star = "⭐ " if is_best else ""
+                star = "★ " if is_best else ""  # Filled star character
                 child_text = f"☐ {star}{video_file['filename']}"
                 size_text = format_file_size(video_file['size'])
-                self.video_tree.insert(
+
+                # Build tags list (avoid empty strings)
+                tags = ["file", video_file['full_path']]
+                if is_best:
+                    tags.append("best")
+
+                # Create with tag for coloring
+                child_id = self.video_tree.insert(
                     parent_id,
                     tk.END,
                     text=child_text,
                     values=(size_text,),
-                    tags=("file", video_file['full_path'])
+                    tags=tuple(tags)
                 )
+
+        # Configure colored star and checkbox tags
+        palette = self.theme_manager.get_palette(self.theme_manager.current_theme)
+        self.video_tree.tag_configure("best", foreground=palette['accent_success'])
+        self.video_tree.tag_configure("checked", foreground=palette['accent_primary'])
 
         # Update status
         total_movies = len(results)
@@ -540,11 +719,16 @@ After mounting, you can enter the path like:
 
     def _video_show_scan_error(self, error_msg: str):
         """Show error message if scan fails."""
+        # Stop scanning animation
+        self._stop_scan_animation()
+
         self.video_status_label.config(text="Scan failed")
         messagebox.showerror("Scan Error", f"An error occurred during scanning:\n{error_msg}")
 
     def _video_clear_tree(self):
         """Clear all items from the tree view."""
+        # Clear hover state
+        self.last_hover_item_video = None
         for item in self.video_tree.get_children():
             self.video_tree.delete(item)
 
@@ -583,17 +767,24 @@ After mounting, you can enter the path like:
             file_path: Full path to the file
         """
         current_text = self.video_tree.item(item_id, "text")
+        current_tags = list(self.video_tree.item(item_id, "tags"))
 
         if file_path in self.checked_files:
             # Uncheck
             self.checked_files.remove(file_path)
             new_text = current_text.replace("☑", "☐")
+            # Remove checked tag
+            if "checked" in current_tags:
+                current_tags.remove("checked")
         else:
             # Check
             self.checked_files.add(file_path)
             new_text = current_text.replace("☐", "☑")
+            # Add checked tag
+            if "checked" not in current_tags:
+                current_tags.append("checked")
 
-        self.video_tree.item(item_id, text=new_text)
+        self.video_tree.item(item_id, text=new_text, tags=tuple(current_tags))
 
     def _video_toggle_folder(self, parent_id: str):
         """
@@ -615,16 +806,22 @@ After mounting, you can enter the path like:
 
             # Toggle all children
             for child in children:
-                child_tags = self.video_tree.item(child, "tags")
+                child_tags = list(self.video_tree.item(child, "tags"))
                 if child_tags and child_tags[0] == "file":
                     file_path = child_tags[1]
                     if should_check:
                         self.checked_files.add(file_path)
                         new_text = self.video_tree.item(child, "text").replace("☐", "☑")
+                        # Add checked tag
+                        if "checked" not in child_tags:
+                            child_tags.append("checked")
                     else:
                         self.checked_files.discard(file_path)
                         new_text = self.video_tree.item(child, "text").replace("☑", "☐")
-                    self.video_tree.item(child, text=new_text)
+                        # Remove checked tag
+                        if "checked" in child_tags:
+                            child_tags.remove("checked")
+                    self.video_tree.item(child, text=new_text, tags=tuple(child_tags))
 
             # Update parent checkbox
             parent_text = self.video_tree.item(parent_id, "text")
@@ -638,12 +835,15 @@ After mounting, you can enter the path like:
         """Select all files in the tree."""
         for parent in self.video_tree.get_children():
             for child in self.video_tree.get_children(parent):
-                tags = self.video_tree.item(child, "tags")
-                if tags and tags[0] == "file":
-                    file_path = tags[1]
+                child_tags = list(self.video_tree.item(child, "tags"))
+                if child_tags and child_tags[0] == "file":
+                    file_path = child_tags[1]
                     self.checked_files.add(file_path)
                     new_text = self.video_tree.item(child, "text").replace("☐", "☑")
-                    self.video_tree.item(child, text=new_text)
+                    # Add checked tag
+                    if "checked" not in child_tags:
+                        child_tags.append("checked")
+                    self.video_tree.item(child, text=new_text, tags=tuple(child_tags))
 
             # Update parent checkbox
             parent_text = self.video_tree.item(parent, "text").replace("☐", "☑")
@@ -657,9 +857,13 @@ After mounting, you can enter the path like:
 
         for parent in self.video_tree.get_children():
             for child in self.video_tree.get_children(parent):
+                child_tags = list(self.video_tree.item(child, "tags"))
                 current_text = self.video_tree.item(child, "text")
                 new_text = current_text.replace("☑", "☐")
-                self.video_tree.item(child, text=new_text)
+                # Remove checked tag
+                if "checked" in child_tags:
+                    child_tags.remove("checked")
+                self.video_tree.item(child, text=new_text, tags=tuple(child_tags))
 
             # Update parent checkbox
             parent_text = self.video_tree.item(parent, "text").replace("☑", "☐")
@@ -793,7 +997,13 @@ After mounting, you can enter the path like:
         # Clear previous results
         self._folder_clear_tree()
         self.checked_folders.clear()
-        self.folder_status_label.config(text="Scanning...")
+
+        # Start scanning animation
+        with self.scanning_lock:
+            self.scanning = True
+        self.scan_dots = 0
+        self._animate_scan_text(self.folder_status_label)
+
         self._folder_update_buttons()
 
         # Run scan in separate thread
@@ -830,6 +1040,9 @@ After mounting, you can enter the path like:
 
     def _folder_display_results(self, results: Dict[str, List[str]], metadata: Dict[str, Dict]):
         """Display folder scan results in the tree view."""
+        # Stop scanning animation
+        self._stop_scan_animation()
+
         self.folder_scan_results = results
         self.folder_metadata = metadata
         self._folder_clear_tree()
@@ -843,7 +1056,7 @@ After mounting, you can enter the path like:
 
         # Populate tree with results
         total_folders = 0
-        for group_id, folder_paths in sorted(results.items()):
+        for idx, (group_id, folder_paths) in enumerate(sorted(results.items())):
             group_size = len(folder_paths)
             total_folders += group_size
 
@@ -879,7 +1092,7 @@ After mounting, you can enter the path like:
                 tk.END,
                 text=group_name,
                 values=("", "", ""),
-                tags=("group", group_id)
+                tags=("group", group_id, "oddrow" if idx % 2 else "")
             )
 
             # Insert children (folders)
@@ -893,7 +1106,7 @@ After mounting, you can enter the path like:
 
                 # Add star if this is the best folder
                 is_best = (folder_path == best_folder_path)
-                star = "⭐ " if is_best else ""
+                star = "★ " if is_best else ""  # Filled star character
 
                 # Check if folder is tagged, or mark as [BEST]
                 if is_best:
@@ -903,14 +1116,24 @@ After mounting, you can enter the path like:
                 else:
                     tag_text = ""
 
+                # Build tags list (avoid empty strings)
+                tags = ["folder", folder_path]
+                if is_best:
+                    tags.append("best")
+
                 child_text = f"☐ {star}{folder_name}"
-                self.folder_tree.insert(
+                child_id = self.folder_tree.insert(
                     parent_id,
                     tk.END,
                     text=child_text,
                     values=(video_count, size_text, tag_text),
-                    tags=("folder", folder_path)
+                    tags=tuple(tags)
                 )
+
+        # Configure colored star and checkbox tags
+        palette = self.theme_manager.get_palette(self.theme_manager.current_theme)
+        self.folder_tree.tag_configure("best", foreground=palette['accent_success'])
+        self.folder_tree.tag_configure("checked", foreground=palette['accent_primary'])
 
         # Update status
         total_groups = len(results)
@@ -920,11 +1143,16 @@ After mounting, you can enter the path like:
 
     def _folder_show_scan_error(self, error_msg: str):
         """Show error message if scan fails."""
+        # Stop scanning animation
+        self._stop_scan_animation()
+
         self.folder_status_label.config(text="Scan failed")
         messagebox.showerror("Scan Error", f"An error occurred during scanning:\n{error_msg}")
 
     def _folder_clear_tree(self):
         """Clear all items from the folder tree view."""
+        # Clear hover state
+        self.last_hover_item_folder = None
         for item in self.folder_tree.get_children():
             self.folder_tree.delete(item)
 
@@ -952,17 +1180,24 @@ After mounting, you can enter the path like:
     def _folder_toggle_folder(self, item_id: str, folder_path: str):
         """Toggle checkbox state for a folder."""
         current_text = self.folder_tree.item(item_id, "text")
+        current_tags = list(self.folder_tree.item(item_id, "tags"))
 
         if folder_path in self.checked_folders:
             # Uncheck
             self.checked_folders.remove(folder_path)
             new_text = current_text.replace("☑", "☐")
+            # Remove checked tag
+            if "checked" in current_tags:
+                current_tags.remove("checked")
         else:
             # Check
             self.checked_folders.add(folder_path)
             new_text = current_text.replace("☐", "☑")
+            # Add checked tag
+            if "checked" not in current_tags:
+                current_tags.append("checked")
 
-        self.folder_tree.item(item_id, text=new_text)
+        self.folder_tree.item(item_id, text=new_text, tags=tuple(current_tags))
 
     def _folder_toggle_group(self, parent_id: str):
         """Toggle all folders in a group."""
@@ -979,16 +1214,22 @@ After mounting, you can enter the path like:
 
             # Toggle all children
             for child in children:
-                child_tags = self.folder_tree.item(child, "tags")
+                child_tags = list(self.folder_tree.item(child, "tags"))
                 if child_tags and child_tags[0] == "folder":
                     folder_path = child_tags[1]
                     if should_check:
                         self.checked_folders.add(folder_path)
                         new_text = self.folder_tree.item(child, "text").replace("☐", "☑")
+                        # Add checked tag
+                        if "checked" not in child_tags:
+                            child_tags.append("checked")
                     else:
                         self.checked_folders.discard(folder_path)
                         new_text = self.folder_tree.item(child, "text").replace("☑", "☐")
-                    self.folder_tree.item(child, text=new_text)
+                        # Remove checked tag
+                        if "checked" in child_tags:
+                            child_tags.remove("checked")
+                    self.folder_tree.item(child, text=new_text, tags=tuple(child_tags))
 
     def _folder_update_buttons(self):
         """Enable or disable buttons based on selection and tags."""
@@ -1101,6 +1342,14 @@ After mounting, you can enter the path like:
         text_widget = tk.Text(text_frame, wrap=tk.WORD, yscrollcommand=scrollbar.set)
         text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=text_widget.yview)
+
+        # Apply current theme to text widget
+        palette = self.theme_manager.get_palette(self.theme_manager.current_theme)
+        text_widget.configure(
+            bg=palette['bg_secondary'],
+            fg=palette['text_primary'],
+            insertbackground=palette['text_primary']
+        )
 
         # Get folder contents
         try:
