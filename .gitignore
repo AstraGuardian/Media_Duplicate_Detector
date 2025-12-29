@@ -38,3 +38,9 @@ Thumbs.db
 
 # PyInstaller
 *.spec
+
+# Test library with large video files
+test_library/
+
+# Private Claude Code instructions
+CLAUDE.md

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Plex Duplicate Detector
+Media Duplicate Detector
 
 A cross-platform GUI application for detecting and managing duplicate
-video files in Plex media libraries.
+video files in media libraries.
 """
 
 import tkinter as tk
