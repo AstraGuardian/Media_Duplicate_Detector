@@ -43,12 +43,25 @@ The app shows you all duplicates in an easy-to-browse tree view, lets you compar
 
 ## Installation
 
-### Requirements
+### Option 1: Download Standalone Executable (Recommended for Most Users)
+
+**No Python installation required!** Download the latest executable for your platform from the [Releases page](https://github.com/AstraGuardian/Media_Duplicate_Detector/releases).
+
+- **Linux**: Download `Media-Duplicate-Detector` (Linux executable)
+- **Windows**: Download `Media-Duplicate-Detector.exe` (Windows executable)
+
+Simply download and run - no setup needed!
+
+### Option 2: Run from Source
+
+If you prefer to run from source or want to contribute to development:
+
+#### Requirements
 
 - Python 3.7 or higher
 - tkinter (usually comes pre-installed with Python)
 
-### Quick Start
+#### Quick Start
 
 1. **Clone the repository**:
    ```bash
@@ -139,6 +152,10 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - Community contributions keep this project growing
 
 **If you need something urgently**: Feel free to fork the project and make it your own. That's what open source is all about!
+
+## Building Executables
+
+Want to build your own standalone executable? See [BUILD.md](BUILD.md) for detailed instructions on creating executables for Linux and Windows.
 
 ## License
 
